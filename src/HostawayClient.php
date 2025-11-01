@@ -1,177 +1,122 @@
 <?php
 
-namespace RanaTuhin\HostawaySDK;
+namespace RanaTuhin\Hostaway;
 
-use GuzzleHttp\Client as GuzzleClient;
-use GuzzleHttp\Exception\GuzzleException;
-use RanaTuhin\HostawaySDK\Exceptions\AuthenticationException;
-use RanaTuhin\HostawaySDK\Exceptions\HostawayException;
+use Illuminate\Support\Facades\Http;
+use RanaTuhin\Hostaway\Exceptions\InvalidConfigurationException;
+use RanaTuhin\Hostaway\Exceptions\RequestFailedException;
+use RanaTuhin\Hostaway\Helpers\RequestHelper;
+use RanaTuhin\Hostaway\Resources\{
+    Listings,
+    Reservations,
+    Messages,
+    Channels,
+    Calendar,
+    Guests,
+    Tasks,
+    Users
+};
 
-/**
- * HostawayClient
- *
- * Authenticates via /v1/accessTokens and manages API resources.
- */
 class HostawayClient
 {
-    protected GuzzleClient $http;
-    protected ?string $clientId;
-    protected ?string $clientSecret;
+    protected string $baseUrl;
+    protected string $clientId;
+    protected string $clientSecret;
+    protected string $grantType;
     protected ?string $accessToken = null;
-    protected string $baseUri;
-    protected float $timeout;
 
-    public function __construct(array $config = [])
+    /** @var RequestHelper */
+    protected RequestHelper $request;
+
+    public function __construct()
     {
-        $this->clientId = $config['client_id'] ?? null;
-        $this->clientSecret = $config['client_secret'] ?? null;
-        $this->baseUri = rtrim($config['base_uri'] ?? 'https://api.hostaway.com/v1/', '/') . '/';
-        $this->timeout = isset($config['timeout']) ? (float)$config['timeout'] : 30.0;
+        $this->baseUrl = config('hostaway.base_url', 'https://api.hostaway.com/v1');
+        $this->clientId = config('hostaway.client_id');
+        $this->clientSecret = config('hostaway.client_secret');
+        $this->grantType = config('hostaway.grant_type', 'client_credentials');
 
-        if (empty($this->clientId) || empty($this->clientSecret)) {
-            throw new AuthenticationException('client_id and client_secret are required for Hostaway API.');
+        foreach (['client_id', 'client_secret', 'grant_type'] as $key) {
+            if (empty(config("hostaway.{$key}"))) {
+                throw InvalidConfigurationException::missing($key);
+            }
         }
 
-        $this->http = new GuzzleClient([
-            'base_uri' => $this->baseUri,
-            'timeout'  => $this->timeout,
-            'headers'  => [
-                'Cache-Control' => 'no-cache',
-                'User-Agent'    => 'RanaTuhin/HostawaySDK',
-            ],
-        ]);
-
         $this->authenticate();
+        $this->request = new RequestHelper($this->baseUrl, $this->accessToken);
     }
 
     /**
-     * Authenticate and retrieve access token
+     * Authenticate and store access token.
      */
     protected function authenticate(): void
     {
-        try {
-            $response = $this->http->post('accessTokens', [
-                'form_params' => [
-                    'grant_type'    => 'client_credentials',
-                    'client_id'     => $this->clientId,
-                    'client_secret' => $this->clientSecret,
-                    'scope'         => 'general',
-                ],
-                'headers' => ['Content-Type' => 'application/x-www-form-urlencoded'],
+        $response = Http::asForm()
+            ->withHeaders([
+                'Cache-control' => 'no-cache',
+                'Content-type' => 'application/x-www-form-urlencoded',
+            ])
+            ->post("{$this->baseUrl}/accessTokens", [
+                'grant_type' => $this->grantType,
+                'client_id' => $this->clientId,
+                'client_secret' => $this->clientSecret,
+                'scope' => 'general',
             ]);
 
-            $data = json_decode((string)$response->getBody(), true);
-
-            if (empty($data['access_token'])) {
-                throw new AuthenticationException('No access_token returned from Hostaway.');
-            }
-
-            $this->accessToken = $data['access_token'];
-        } catch (GuzzleException $e) {
-            throw new AuthenticationException('Failed to get Hostaway access token: ' . $e->getMessage());
+        if (!$response->successful()) {
+            throw RequestFailedException::fromResponse($response->json());
         }
+
+        $this->accessToken = $response->json('access_token');
     }
 
     /**
-     * Generic request helper
+     * Return the HTTP request helper.
      */
-    public function request(string $method, string $uri, array $options = []): ?array
+    public function request(): RequestHelper
     {
-        if (!$this->accessToken) {
-            $this->authenticate();
-        }
-
-        $options['headers'] = array_merge(
-            $options['headers'] ?? [],
-            [
-                'Authorization' => 'Bearer ' . $this->accessToken,
-                'Cache-Control' => 'no-cache',
-                'Accept'        => 'application/json',
-            ]
-        );
-
-        try {
-            $response = $this->http->request($method, ltrim($uri, '/'), $options);
-            $body = (string)$response->getBody();
-
-            return $body ? json_decode($body, true) : null;
-        } catch (GuzzleException $e) {
-            $respBody = method_exists($e, 'getResponse') && $e->getResponse()
-                ? (string)$e->getResponse()->getBody()
-                : $e->getMessage();
-
-            throw new HostawayException("Request failed: {$respBody}", $e->getCode(), $e);
-        }
+        return $this->request;
     }
 
-    // Shorthand HTTP methods
-    public function get(string $uri, array $query = []): ?array
+    /**
+     * Initialize API resource classes.
+     */
+    public function listings(): Listings
     {
-        return $this->request('GET', $uri, ['query' => $query]);
+        return new Listings($this->request);
     }
 
-    public function post(string $uri, array $data = []): ?array
+    public function reservations(): Reservations
     {
-        return $this->request('POST', $uri, ['json' => $data]);
+        return new Reservations($this->request);
     }
 
-    public function put(string $uri, array $data = []): ?array
+    public function messages(): Messages
     {
-        return $this->request('PUT', $uri, ['json' => $data]);
+        return new Messages($this->request);
     }
 
-    public function delete(string $uri): ?array
+    public function channels(): Channels
     {
-        return $this->request('DELETE', $uri);
+        return new Channels($this->request);
     }
 
-    // ----------------------------
-    // Resource accessors
-    // ----------------------------
-
-    public function listings(): Resources\Listings
+    public function calendar(): Calendar
     {
-        return new Resources\Listings($this);
+        return new Calendar($this->request);
     }
 
-    public function reservations(): Resources\Reservations
+    public function guests(): Guests
     {
-        return new Resources\Reservations($this);
+        return new Guests($this->request);
     }
 
-    public function messages(): Resources\Messages
+    public function tasks(): Tasks
     {
-        return new Resources\Messages($this);
+        return new Tasks($this->request);
     }
 
-    public function channels(): Resources\Channels
+    public function users(): Users
     {
-        return new Resources\Channels($this);
-    }
-
-    public function calendar(): Resources\Calendar
-    {
-        return new Resources\Calendar($this);
-    }
-
-    public function guests(): Resources\Guests
-    {
-        return new Resources\Guests($this);
-    }
-
-    public function tasks(): Resources\Tasks
-    {
-        return new Resources\Tasks($this);
-    }
-
-    public function users(): Resources\Users
-    {
-        return new Resources\Users($this);
-    }
-
-    public function httpClient(): GuzzleClient
-    {
-        return $this->http;
+        return new Users($this->request);
     }
 }
-

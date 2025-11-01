@@ -16,7 +16,17 @@
      },
      "autoload": {
           "psr-4": {
-               "HostawaySDK\\": "src/"
+               "RanaTuhin\\Hostaway\\": "src/"
+          }
+     },
+     "extra": {
+          "laravel": {
+               "providers": [
+                    "RanaTuhin\\Hostaway\\HostawayServiceProvider"
+               ],
+               "aliases": {
+                    "Hostaway": "RanaTuhin\\Hostaway\\Facades\\Hostaway"
+               }
           }
      },
      "require-dev": {
