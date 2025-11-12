@@ -89,7 +89,3 @@ Example:
 $listings = $client->listings()->getAll();
 $reservation = $client->reservations()->create([]);
 ```
-
----
-
-## 📜 License
