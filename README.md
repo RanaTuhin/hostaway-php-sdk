@@ -83,21 +83,6 @@ $listings = $client->listings()->getAll();
 $reservation = $client->reservations()->find(12345);
 ```
 
----
-
-## 🧱 Available Resources
-
-| Resource | Methods |
-|-----------|----------|
-| `listings()` | `getAll()`, `find($id)`, `update($id)`, `delete($id)`|
-| `reservations()` | `getAll()`, `find($id)`, `create($data)` |
-| `messages()` | `getAll()`, `send($data)` |
-| `channels()` | `getAll()` |
-| `calendar()` | `getAll()`, `update($data)` |
-| `guests()` | `getAll()`, `find($id)` |
-| `tasks()` | `getAll()`, `find($id)`, `create($data)` |
-| `users()` | `getAll()`, `find($id)` |
-
 Example:
 
 ```php
