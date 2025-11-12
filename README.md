@@ -93,5 +93,3 @@ $reservation = $client->reservations()->create([]);
 ---
 
 ## 📜 License
-
-This package is open-sourced software licensed under the [MIT License](LICENSE).
