@@ -7,7 +7,7 @@ A modern PHP SDK for the [Hostaway API](https://api.hostaway.com/documentation),
 ## 🚀 Features   
 
 - Clean, fluent API for all Hostaway endpoints  
-- Built-in authentication with API Key  
+- Built-in authentication with API Key   
 - Full Laravel support (auto-discovery, facade, and config)  
 - Pest-powered testing    
 - PSR-4 compliant and publishable config 
